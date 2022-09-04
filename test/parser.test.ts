@@ -58,6 +58,8 @@ f
       .toEqual(Array.from('abcdef'))
     expect(data.slides[2].frontmatter)
       .toEqual({ layout: 'z' })
+    expect(data.slides[3].frontmatter)
+      .toEqual({ })
   })
 
   it('parse section matter', () => {
@@ -86,5 +88,7 @@ f
       .toEqual(Array.from('abcdef'))
     expect(data.slides[2].frontmatter)
       .toEqual({ layout: 'z' })
+    expect(data.slides[3].frontmatter)
+      .toEqual({ })
   })
 })

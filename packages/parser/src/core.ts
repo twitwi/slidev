@@ -1,6 +1,6 @@
 import YAML from 'js-yaml'
 import { isObject, isTruthy, objectMap } from '@antfu/utils'
-import type { SlideInfo, SlideInfoBase, SlidevFeatureFlags, SlidevMarkdown, SlidevThemeMeta } from '@slidev/types'
+import type { SlideInfoBase, SlidevFeatureFlags, SlidevMarkdown, SlidevPreparserState, SlidevThemeMeta } from '@slidev/types'
 import { resolveConfig } from './config'
 
 export function stringify(data: SlidevMarkdown) {
@@ -102,65 +102,98 @@ export function parseSlide(raw: string): SlideInfoBase {
   }
 }
 
+function checkDefined<T>(o: T | undefined, msg: () => string): T {
+  if (o === undefined)
+    throw new Error(msg())
+  return o
+}
+
 export function parse(
   markdown: string,
   filepath?: string,
   themeMeta?: SlidevThemeMeta,
 ): SlidevMarkdown {
-  const lines = markdown.split(/\r?\n/g)
-  const slides: SlideInfo[] = []
-
-  let start = 0
+  const state: SlidevPreparserState = {
+    lines: markdown.split(/\r?\n/g),
+    slides: [],
+    i: 0,
+    start: 0,
+    mode: 'content',
+    modeStack: [],
+  }
 
   function slice(end: number) {
-    if (start === end)
-      return
-    const raw = lines.slice(start, end).join('\n')
-    slides.push({
-      ...parseSlide(raw),
-      index: slides.length,
-      start,
-      end,
-    })
-    start = end + 1
+    if (state.start !== end) {
+      const raw = state.lines.slice(state.start, end).join('\n')
+      state.slides.push({
+        ...parseSlide(raw),
+        index: state.slides.length,
+        start: state.start,
+        end,
+      })
+    }
+    state.start = end
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trimEnd()
-    if (line.match(/^---+/)) {
-      slice(i)
+  function step({ by = 1, mode = '', push = false, pop = false } = {}) {
+    state.i += by
+    if (push)
+      state.modeStack.push(state.mode)
+    if (pop)
+      state.mode = checkDefined(state.modeStack.pop(), () => `Preparser cannot pop empty modeStack, state is ${JSON.stringify(state)}`)
+    if (mode !== '')
+      state.mode = mode
+  }
 
-      const next = lines[i + 1]
-      // found frontmatter, skip next dash
-      if (line.match(/^---([^-].*)?$/) && !next?.match(/^\s*$/)) {
-        start = i
-        for (i += 1; i < lines.length; i++) {
-          if (lines[i].trimEnd().match(/^---$/))
-            break
-        }
-      }
+  while (state.i < state.lines.length) {
+    const line = state.lines[state.i].trimEnd()
+    if (state.mode === 'frontmatter-or-content') {
+      const next = state.lines[state.i + 1]
+      let hasFrontmatter = false
+      if (line.match(/^---([^-].*)?$/) && !next?.match(/^\s*$/))
+        hasFrontmatter = true
+      else
+        state.start++
+      step({ mode: hasFrontmatter ? 'frontmatter' : 'content' })
     }
-    // skip code block
-    else if (line.startsWith('```')) {
-      for (i += 1; i < lines.length; i++) {
-        if (lines[i].startsWith('```'))
-          break
+    else if (state.mode === 'frontmatter') {
+      if (line.trimEnd().match(/^---$/))
+        step({ mode: 'content' })
+      else
+        step()
+    }
+    else if (state.mode === 'content') {
+      if (line.startsWith('```')) {
+        step({ mode: 'codeblock', push: true })
+        continue
       }
+      if (line.match(/^---+/)) {
+        slice(state.i)
+        step({ by: 0, mode: 'frontmatter-or-content' })
+        continue
+      }
+      step()
+    }
+    else if (state.mode === 'codeblock') {
+      if (line.startsWith('```'))
+        step({ pop: true })
+      else
+        step()
     }
   }
 
-  if (start <= lines.length - 1)
-    slice(lines.length)
+  if (state.start <= state.lines.length - 1)
+    slice(state.lines.length)
 
-  const headmatter = slides[0]?.frontmatter || {}
-  headmatter.title = headmatter.title || slides[0]?.title
+  const headmatter = state.slides[0]?.frontmatter || {}
+  headmatter.title = headmatter.title || state.slides[0]?.title
   const config = resolveConfig(headmatter, themeMeta)
   const features = detectFeatures(markdown)
 
   return {
     raw: markdown,
     filepath,
-    slides,
+    slides: state.slides,
     config,
     features,
     headmatter,

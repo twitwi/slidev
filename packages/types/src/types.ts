@@ -55,4 +55,16 @@ export interface SlidevMarkdown {
   themeMeta?: SlidevThemeMeta
 }
 
+// Preparser modes: listing the built-in ones but it is open to extensions
+export type SlidevPreparserMode = 'content' | 'frontmatter' | 'content-or-frontmatter' | 'codeblock' | string
+
+export interface SlidevPreparserState {
+  lines: string[]
+  slides: SlideInfo[]
+  i: number
+  start: number
+  mode: SlidevPreparserMode
+  modeStack: SlidevPreparserMode[]
+}
+
 export type RenderContext = 'slide' | 'overview' | 'presenter' | 'previewNext'
