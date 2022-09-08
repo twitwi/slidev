@@ -32,8 +32,8 @@ describe('md parser', () => {
     })
   }
 
-  it('parse', () => {
-    const data = parse(`
+  it('parse', async () => {
+    const data = await parse(`
 a
 
 ---
@@ -62,8 +62,8 @@ f
       .toEqual({ })
   })
 
-  it('parse section matter', () => {
-    const data = parse(`
+  it('parse section matter', async () => {
+    const data = await parse(`
 a
 
 ---

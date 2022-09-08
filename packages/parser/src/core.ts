@@ -1,6 +1,6 @@
 import YAML from 'js-yaml'
 import { isObject, isTruthy, objectMap } from '@antfu/utils'
-import type { SlideInfoBase, SlidevFeatureFlags, SlidevMarkdown, SlidevPreparserState, SlidevThemeMeta } from '@slidev/types'
+import type { PreparserExtensionFromHeadmatter, SlideInfoBase, SlidevFeatureFlags, SlidevMarkdown, SlidevPreparserExtension, SlidevPreparserState, SlidevThemeMeta } from '@slidev/types'
 import { resolveConfig } from './config'
 
 export function stringify(data: SlidevMarkdown) {
@@ -108,11 +108,13 @@ function checkDefined<T>(o: T | undefined, msg: () => string): T {
   return o
 }
 
-export function parse(
+export async function parse(
   markdown: string,
   filepath?: string,
   themeMeta?: SlidevThemeMeta,
-): SlidevMarkdown {
+  extensions?: SlidevPreparserExtension[],
+  onHeadmatter?: PreparserExtensionFromHeadmatter,
+): Promise<SlidevMarkdown> {
   const state: SlidevPreparserState = {
     lines: markdown.split(/\r?\n/g),
     slides: [],
@@ -146,6 +148,17 @@ export function parse(
   }
 
   while (state.i < state.lines.length) {
+    if (extensions && extensions.length > 0) {
+      let shouldContinue = false
+      for (const e of extensions) {
+        if (e.handle(state)) {
+          shouldContinue = true
+          break
+        }
+      }
+      if (shouldContinue)
+        continue
+    }
     const line = state.lines[state.i].trimEnd()
     if (state.mode === 'frontmatter-or-content') {
       const next = state.lines[state.i + 1]
@@ -157,10 +170,15 @@ export function parse(
       step({ mode: hasFrontmatter ? 'frontmatter' : 'content' })
     }
     else if (state.mode === 'frontmatter') {
-      if (line.trimEnd().match(/^---$/))
+      if (line.trimEnd().match(/^---$/)) {
+        if (state.slides.length === 0 && onHeadmatter) { // headmatter
+          const o = YAML.load(state.lines.slice(state.start, state.i).join('\n'))
+          // now that we have the list of addons, we can load the preparser-extensions they contain
+          extensions = await onHeadmatter(o, extensions, filepath)
+        }
         step({ mode: 'content' })
-      else
-        step()
+      }
+      else { step() }
     }
     else if (state.mode === 'content') {
       if (line.startsWith('```')) {

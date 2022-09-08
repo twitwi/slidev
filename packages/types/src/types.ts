@@ -67,4 +67,12 @@ export interface SlidevPreparserState {
   modeStack: SlidevPreparserMode[]
 }
 
+export interface SlidevPreparserExtension {
+  handle(state: SlidevPreparserState): boolean
+}
+
+export type PreparserExtensionLoader = (addons: string[], filepath?: string) => Promise<SlidevPreparserExtension[]>
+
+export type PreparserExtensionFromHeadmatter = (headmatter: any, exts?: SlidevPreparserExtension[], filepath?: string) => Promise<SlidevPreparserExtension[]>
+
 export type RenderContext = 'slide' | 'overview' | 'presenter' | 'previewNext'
