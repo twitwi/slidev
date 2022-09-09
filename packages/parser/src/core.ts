@@ -122,17 +122,43 @@ export async function parse(
     start: 0,
     mode: 'content',
     modeStack: [],
+    frontmatterPrepend: [],
+    frontmatterAppend: [],
+    contentPrepend: [],
+    contentAppend: [],
+    ext: {},
   }
 
   function slice(end: number) {
     if (state.start !== end) {
-      const raw = state.lines.slice(state.start, end).join('\n')
+      let contentStart = 0
+      const raw = state.lines.slice(state.start, end)
+      if (state.frontmatterPrepend.length + state.frontmatterAppend.length > 0) {
+        const hasFrontmatter = raw[0].match(/^---([^-].*)?$/)
+        if (!hasFrontmatter)
+          raw.splice(0, 0, '---', '---')
+        let close = 1
+        while (!raw[close].trimEnd().match(/^---$/))
+          close++
+
+        raw.splice(close, 0, ...state.frontmatterAppend)
+        raw.splice(1, 0, ...state.frontmatterPrepend)
+        contentStart = close + 1 + state.frontmatterPrepend.length + state.frontmatterAppend.length
+      }
+      raw.splice(contentStart, 0, ...state.contentPrepend)
+      raw.push(...state.contentAppend)
+
       state.slides.push({
-        ...parseSlide(raw),
+        ...parseSlide(raw.join('\n')),
         index: state.slides.length,
         start: state.start,
         end,
       })
+
+      state.frontmatterPrepend = []
+      state.frontmatterAppend = []
+      state.contentPrepend = []
+      state.contentAppend = []
     }
     state.start = end
   }
@@ -151,7 +177,9 @@ export async function parse(
     if (extensions && extensions.length > 0) {
       let shouldContinue = false
       for (const e of extensions) {
-        if (e.handle(state)) {
+        if (e.disabled)
+          continue
+        if (e.handle?.(state)) {
           shouldContinue = true
           break
         }
@@ -160,7 +188,7 @@ export async function parse(
         continue
     }
     const line = state.lines[state.i].trimEnd()
-    if (state.mode === 'frontmatter-or-content') {
+    if (state.mode === ':frontmatter-or-content') {
       const next = state.lines[state.i + 1]
       let hasFrontmatter = false
       if (line.match(/^---([^-].*)?$/) && !next?.match(/^\s*$/))
@@ -186,8 +214,7 @@ export async function parse(
         continue
       }
       if (line.match(/^---+/)) {
-        slice(state.i)
-        step({ by: 0, mode: 'frontmatter-or-content' })
+        step({ by: 0, mode: ':slice' })
         continue
       }
       step()
@@ -197,6 +224,13 @@ export async function parse(
         step({ pop: true })
       else
         step()
+    }
+    else if (state.mode === ':slice') {
+      slice(state.i)
+      step({ by: 0, mode: ':sliced' })
+    }
+    else if (state.mode === ':sliced') {
+      step({ by: 0, mode: ':frontmatter-or-content' })
     }
   }
 

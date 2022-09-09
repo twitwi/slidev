@@ -55,8 +55,14 @@ export interface SlidevMarkdown {
   themeMeta?: SlidevThemeMeta
 }
 
-// Preparser modes: listing the built-in ones but it is open to extensions
-export type SlidevPreparserMode = 'content' | 'frontmatter' | 'content-or-frontmatter' | 'codeblock' | string
+/**
+ * Preparser modes: listing the built-in ones but it is open to extensions.
+ * Modes starting with `:` are pseudo-modes (usually keeping the cursor in place) so that extensions can handle them.
+*/
+export type SlidevPreparserMode = (
+  'content' | 'frontmatter' | 'codeblock' |
+  ':content-or-frontmatter' | ':slice' | ':sliced' |
+  string)
 
 export interface SlidevPreparserState {
   lines: string[]
@@ -65,10 +71,16 @@ export interface SlidevPreparserState {
   start: number
   mode: SlidevPreparserMode
   modeStack: SlidevPreparserMode[]
+  frontmatterPrepend: string[]
+  frontmatterAppend: string[]
+  contentPrepend: string[]
+  contentAppend: string[]
+  ext: any
 }
 
 export interface SlidevPreparserExtension {
-  handle(state: SlidevPreparserState): boolean
+  handle?(state: SlidevPreparserState): boolean
+  disabled?: boolean
 }
 
 export type PreparserExtensionLoader = (addons: string[], filepath?: string) => Promise<SlidevPreparserExtension[]>
