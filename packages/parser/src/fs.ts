@@ -18,7 +18,7 @@ export async function load(filepath: string, themeMeta?: SlidevThemeMeta, conten
   const data = await parse(markdown, filepath, themeMeta, undefined, async (headmatter, exts?: SlidevPreparserExtension[], filepath?: string) => {
     return [
       ...exts ?? [],
-      ...preparserExtensionLoader ? await preparserExtensionLoader(headmatter.addons, filepath) : [],
+      ...preparserExtensionLoader ? await preparserExtensionLoader(headmatter.addons ?? [], filepath) : [],
     ]
   })
 
