@@ -133,8 +133,8 @@ export async function parse(
     if (state.start !== end) {
       let contentStart = 0
       const raw = state.lines.slice(state.start, end)
+      const hasFrontmatter = raw[0].match(/^---([^-].*)?$/)
       if (state.frontmatterPrepend.length + state.frontmatterAppend.length > 0) {
-        const hasFrontmatter = raw[0].match(/^---([^-].*)?$/)
         if (!hasFrontmatter)
           raw.splice(0, 0, '---', '---')
         let close = 1
@@ -144,6 +144,12 @@ export async function parse(
         raw.splice(close, 0, ...state.frontmatterAppend)
         raw.splice(1, 0, ...state.frontmatterPrepend)
         contentStart = close + 1 + state.frontmatterPrepend.length + state.frontmatterAppend.length
+      }
+      else if (hasFrontmatter) {
+        contentStart = 1
+        while (!raw[contentStart].trimEnd().match(/^---$/))
+          contentStart++
+        contentStart++
       }
       raw.splice(contentStart, 0, ...state.contentPrepend)
       raw.push(...state.contentAppend)
