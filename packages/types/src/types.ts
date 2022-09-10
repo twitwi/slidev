@@ -61,7 +61,7 @@ export interface SlidevMarkdown {
 */
 export type SlidevPreparserMode = (
   'content' | 'frontmatter' | 'codeblock' |
-  ':content-or-frontmatter' | ':slice' | ':sliced' |
+  ':start' | ':content-or-frontmatter' | ':slice' | ':sliced' | ':end' |
   string)
 
 export interface SlidevPreparserState {
@@ -80,6 +80,7 @@ export interface SlidevPreparserState {
 
 export interface SlidevPreparserExtension {
   handle?(state: SlidevPreparserState): boolean
+  handlePseudoMode?(state: SlidevPreparserState): boolean
   disabled?: boolean
 }
 

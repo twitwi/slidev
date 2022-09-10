@@ -120,7 +120,7 @@ export async function parse(
     slides: [],
     i: 0,
     start: 0,
-    mode: 'content',
+    mode: ':start',
     modeStack: [],
     frontmatterPrepend: [],
     frontmatterAppend: [],
@@ -163,23 +163,30 @@ export async function parse(
     state.start = end
   }
 
-  function step({ by = 1, mode = '', push = false, pop = false } = {}) {
+  function step({ by = 1, mode = '', push = '', pop = false } = {}) {
     state.i += by
-    if (push)
-      state.modeStack.push(state.mode)
+    if (push !== '')
+      state.modeStack.push(push)
     if (pop)
       state.mode = checkDefined(state.modeStack.pop(), () => `Preparser cannot pop empty modeStack, state is ${JSON.stringify(state)}`)
     if (mode !== '')
       state.mode = mode
   }
 
-  while (state.i < state.lines.length) {
+  while (state.i < state.lines.length + 1) {
+    if (state.i === state.lines.length && state.start <= state.lines.length - 1 && state.mode === 'content') {
+      // Reached EOS and there is content to slice
+      step({ by: 0, mode: ':slice', push: ':end' })
+      continue
+    }
     if (extensions && extensions.length > 0) {
+      const method = state.mode.startsWith(':') ? 'handlePseudoMode' : 'handle'
       let shouldContinue = false
       for (const e of extensions) {
         if (e.disabled)
           continue
-        if (e.handle?.(state)) {
+        const v = e[method]?.(state)
+        if (v) {
           shouldContinue = true
           break
         }
@@ -187,9 +194,21 @@ export async function parse(
       if (shouldContinue)
         continue
     }
-    const line = state.lines[state.i].trimEnd()
-    if (state.mode === ':frontmatter-or-content') {
+    if (state.mode === ':end')
+      break
+
+    const line = state.lines[state.i]?.trimEnd()
+    if (state.mode === ':start') {
+      if (!line.trimEnd().match(/^---$/) && onHeadmatter)
+        extensions = await onHeadmatter({}, extensions, filepath)
+      step({ by: 0, mode: 'content' })
+    }
+    else if (state.mode === ':frontmatter-or-content') {
       const next = state.lines[state.i + 1]
+      if (next === undefined) {
+        step({ mode: ':end' })
+        continue
+      }
       let hasFrontmatter = false
       if (line.match(/^---([^-].*)?$/) && !next?.match(/^\s*$/))
         hasFrontmatter = true
@@ -210,11 +229,11 @@ export async function parse(
     }
     else if (state.mode === 'content') {
       if (line.startsWith('```')) {
-        step({ mode: 'codeblock', push: true })
+        step({ mode: 'codeblock', push: 'content' })
         continue
       }
       if (line.match(/^---+/)) {
-        step({ by: 0, mode: ':slice' })
+        step({ by: 0, mode: ':slice', push: ':frontmatter-or-content' })
         continue
       }
       step()
@@ -230,12 +249,12 @@ export async function parse(
       step({ by: 0, mode: ':sliced' })
     }
     else if (state.mode === ':sliced') {
-      step({ by: 0, mode: ':frontmatter-or-content' })
+      step({ by: 0, pop: true })
     }
   }
 
-  if (state.start <= state.lines.length - 1)
-    slice(state.lines.length)
+  // if (state.start <= state.lines.length - 1)
+  //  slice(state.lines.length)
 
   const headmatter = state.slides[0]?.frontmatter || {}
   headmatter.title = headmatter.title || state.slides[0]?.title
